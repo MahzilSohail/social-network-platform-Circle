@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Circle — Social Network</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div class="topbar">
+  <div class="brand"><div class="brand-mark"></div><span class="brand-text">Circle</span></div>
+
+  <div class="topbar-search">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--ink)" stroke-width="2"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+    <input type="text" id="search-input" placeholder="Search posts or people…">
+  </div>
+
+  <div class="topbar-right">
+    <button class="bell-btn" id="theme-toggle-btn" title="Toggle light / dark mode"></button>
+
+    <div class="live-pill" title="Real-time layer connected (BroadcastChannel)">
+      <span class="live-dot"></span><span class="live-text">Live</span>
+    </div>
+
+    <div class="viewer-switch" title="Switch which account you're viewing as — open this page in a second tab and try liking or commenting to see it update live.">
+      <div class="mini-avatar" id="viewer-avatar"></div>
+      <select id="viewer-select"></select>
+    </div>
+
+    <div class="bell-wrap">
+      <button class="bell-btn" id="msg-btn" title="Messages">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="var(--ink)" stroke-width="2"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
+        <span class="badge" id="msg-badge" style="display:none;">0</span>
+      </button>
+      <div class="dropdown" id="msg-dropdown">
+        <div class="dropdown-head"><h4>Messages</h4></div>
+        <div class="dropdown-body" id="msg-list"></div>
+      </div>
+    </div>
+
+    <div class="bell-wrap">
+      <button class="bell-btn" id="bell-btn" title="Notifications">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="var(--ink)" stroke-width="2"><path d="M18 8a6 6 0 10-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/></svg>
+        <span class="badge" id="notif-badge" style="display:none;">0</span>
+      </button>
+      <div class="dropdown" id="notif-dropdown">
+        <div class="dropdown-head"><h4>Notifications</h4><button id="mark-all-read">Mark all read</button></div>
+        <div class="dropdown-body" id="notif-list"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="layout">
+  <div class="col col-left" id="col-left">
+
+    <div class="panel" id="profile-card">
+      <div class="profile-cover" id="profile-cover"></div>
+      <div class="profile-card-body">
+        <div class="avatar" id="profile-avatar"></div>
+        <div class="profile-name" id="profile-name"></div>
+        <div class="profile-handle" id="profile-handle"></div>
+        <div class="profile-bio" id="profile-bio"></div>
+        <button class="edit-bio-btn" id="edit-bio-btn">Edit bio</button>
+        <div class="profile-stats">
+          <div><b id="stat-friends">0</b> friends</div>
+          <div><b id="stat-posts">0</b> posts</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h3>Privacy settings</h3>
+      <div class="field">
+        <label for="profile-visibility">Who can view my profile</label>
+        <select id="profile-visibility">
+          <option value="public">Public — anyone</option>
+          <option value="friends">Friends only</option>
+          <option value="onlyme">Only me</option>
+        </select>
+      </div>
+      <div class="field" style="margin-bottom:0;">
+        <label for="default-post-visibility">Default audience for new posts</label>
+        <select id="default-post-visibility">
+          <option value="public">Public</option>
+          <option value="friends">Friends only</option>
+          <option value="onlyme">Only me</option>
+        </select>
+      </div>
+      <div class="hint">Post audience can still be changed per-post from the composer below.</div>
+    </div>
+  </div>
+
+  <div class="col col-center mobile-show" id="col-center">
+    <div class="panel">
+      <div class="composer">
+        <div class="avatar" id="composer-avatar"></div>
+        <div class="composer-main">
+          <textarea id="composer-text" placeholder="Share something with your circle…" rows="2"></textarea>
+          <div class="composer-image-preview" id="composer-preview">
+            <img id="composer-preview-img" src="" alt="">
+            <button id="composer-remove-image" title="Remove image">&times;</button>
+          </div>
+          <div class="composer-row">
+            <label class="icon-btn" title="Add photo">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="8.5" cy="10.5" r="1.5"/><path d="M21 15l-5-5L5 19"/></svg>
+              <input type="file" accept="image/*" id="composer-file" style="display:none;">
+            </label>
+            <select class="vis-select" id="composer-visibility">
+              <option value="public">Public</option>
+              <option value="friends">Friends</option>
+              <option value="onlyme">Only me</option>
+            </select>
+            <button class="btn-primary" id="composer-post-btn">Post</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="feed-filter-row">
+      <button class="chip feed-chip active" data-feed-filter="all">All posts</button>
+      <button class="chip feed-chip" data-feed-filter="saved">Saved</button>
+    </div>
+
+    <div id="feed"></div>
+  </div>
+
+  <div class="col col-right" id="col-right">
+    <div class="panel">
+      <h3>Friend requests</h3>
+      <div id="incoming-requests"></div>
+    </div>
+    <div class="panel">
+      <h3>People you may know</h3>
+      <div id="suggestions"></div>
+    </div>
+    <div class="panel">
+      <h3>Your friends</h3>
+      <div id="friends-list"></div>
+    </div>
+  </div>
+</div>
+
+<div class="mobile-tabs">
+  <button data-tab="feed" class="active">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--muted)" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/></svg>
+    Feed
+  </button>
+  <button data-tab="right">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--muted)" stroke-width="2"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>
+    Friends
+  </button>
+  <button data-tab="left">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--muted)" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 4-6 8-6s8 2 8 6"/></svg>
+    Profile
+  </button>
+</div>
+
+<div class="toast-stack" id="toast-stack"></div>
+
+<div class="modal-overlay" id="profile-modal-overlay">
+  <div class="modal" id="profile-modal-content"></div>
+</div>
+
+<div class="lightbox-overlay" id="lightbox-overlay">
+  <button class="lightbox-close" id="lightbox-close-btn">&times;</button>
+  <img id="lightbox-img" src="" alt="">
+</div>
+
+<div class="modal-overlay" id="chat-modal-overlay">
+  <div class="modal chat-modal" id="chat-modal-content"></div>
+</div>
+
+<script src="script.js"></script>
+
+</body>
+</html>

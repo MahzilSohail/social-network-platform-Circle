@@ -53,6 +53,7 @@
 
   /* ---------------- "Database" (localStorage) ---------------- */
   const DB_KEY = 'circle_db_v4';
+  const AUTH_KEY = 'circle_auth_user_id';
   const PALETTE = ['#1F6F54', '#C98A2C', '#C0546B', '#55647A', '#B06A45'];
 
   function illustrationDashboard(){
@@ -66,11 +67,11 @@
   function seedDB(){
     const now = Date.now();
     const users = [
-      { id:'u1', name:'Mahzil Sohail', handle:'@mahzilsohail', bio:'Building things on the internet, one small ship at a time. 🌱', friends:['u2','u3'], savedPosts:[], privacy:{ profile:'public', defaultPost:'public' } },
-      { id:'u2', name:'Zara Malik', handle:'@zara.codes', bio:'Product designer. Coffee-powered. Currently obsessed with grid systems.', friends:['u1','u3'], savedPosts:[], privacy:{ profile:'public', defaultPost:'friends' } },
-      { id:'u3', name:'Hamza Iqbal', handle:'@hamzadev', bio:'Backend engineer. I speak fluent SQL and mild sarcasm.', friends:['u1','u2'], savedPosts:[], privacy:{ profile:'friends', defaultPost:'public' } },
-      { id:'u4', name:'Sana Tariq', handle:'@sana.t', bio:'Photographer & tea enthusiast. Always looking for good light.', friends:[], savedPosts:[], privacy:{ profile:'public', defaultPost:'public' } },
-      { id:'u5', name:'Bilal Ahmed', handle:'@bilal.a', bio:'Marketing lead, ex-founder, full-time dad joke supplier.', friends:[], savedPosts:[], privacy:{ profile:'public', defaultPost:'friends' } },
+      { id:'u1', name:'Mahzil Sohail', handle:'@mahzilsohail', email:'mahzil@example.com', password:'password123', bio:'Building things on the internet, one small ship at a time. 🌱', friends:['u2','u3'], savedPosts:[], privacy:{ profile:'public', defaultPost:'public' }, color:'#1F6F54' },
+      { id:'u2', name:'Zara Malik', handle:'@zara.codes', email:'zara@example.com', password:'password123', bio:'Product designer. Coffee-powered. Currently obsessed with grid systems.', friends:['u1','u3'], savedPosts:[], privacy:{ profile:'public', defaultPost:'friends' }, color:'#C98A2C' },
+      { id:'u3', name:'Hamza Iqbal', handle:'@hamzadev', email:'hamza@example.com', password:'password123', bio:'Backend engineer. I speak fluent SQL and mild sarcasm.', friends:['u1','u2'], savedPosts:[], privacy:{ profile:'friends', defaultPost:'public' }, color:'#C0546B' },
+      { id:'u4', name:'Sana Tariq', handle:'@sana.t', email:'sana@example.com', password:'password123', bio:'Photographer & tea enthusiast. Always looking for good light.', friends:[], savedPosts:[], privacy:{ profile:'public', defaultPost:'public' }, color:'#55647A' },
+      { id:'u5', name:'Bilal Ahmed', handle:'@bilal.a', email:'bilal@example.com', password:'password123', bio:'Marketing lead, ex-founder, full-time dad joke supplier.', friends:[], savedPosts:[], privacy:{ profile:'public', defaultPost:'friends' }, color:'#B06A45' },
     ];
 
     const posts = [
@@ -110,7 +111,19 @@
     }
     // defensive migration in case of a partially-shaped or older record
     if (!Array.isArray(data.messages)) data.messages = [];
-    data.users.forEach(u => { if (!Array.isArray(u.savedPosts)) u.savedPosts = []; });
+    if (!Array.isArray(data.friendRequests)) data.friendRequests = [];
+    if (!Array.isArray(data.notifications)) data.notifications = [];
+    if (!Array.isArray(data.posts)) data.posts = [];
+    if (!Array.isArray(data.users)) data.users = [];
+    
+    data.users.forEach((u, idx) => {
+      if (!Array.isArray(u.savedPosts)) u.savedPosts = [];
+      if (!Array.isArray(u.friends)) u.friends = [];
+      if (!u.privacy) u.privacy = { profile:'public', defaultPost:'public' };
+      if (!u.email) u.email = u.handle ? u.handle.replace('@', '') + '@example.com' : `user${idx+1}@example.com`;
+      if (!u.password) u.password = 'password123';
+      if (!u.color) u.color = PALETTE[idx % PALETTE.length];
+    });
     localStorage.setItem(DB_KEY, JSON.stringify(data));
     return data;
   }
@@ -118,19 +131,29 @@
   function nextId(db, prefix){ db.seq += 1; return prefix + db.seq; }
 
   let db = loadDB();
-  let currentUserId = db.users[0].id;
+  let currentUserId = localStorage.getItem(AUTH_KEY) || null;
+  if (currentUserId && !db.users.find(u => u.id === currentUserId)){
+    currentUserId = null;
+    localStorage.removeItem(AUTH_KEY);
+  }
+
   let openMenuPostId = null;
   let feedFilter = 'all'; // 'all' | 'saved'
   let activeChatWith = null; // userId of open chat thread, or null
   const openComments = new Set();
-  const seenMessageIds = new Set(db.messages.filter(m => m.to === currentUserId).map(m => m.id));
+  const seenMessageIds = new Set(currentUserId ? db.messages.filter(m => m.to === currentUserId).map(m => m.id) : []);
   const onlineHeartbeats = new Map(); // userId -> last-seen timestamp (in-memory presence)
-  const seenNotifIds = new Set(db.notifications.filter(n => n.userId === currentUserId).map(n => n.id));
+  const seenNotifIds = new Set(currentUserId ? db.notifications.filter(n => n.userId === currentUserId).map(n => n.id) : []);
 
-  function currentUser(){ return db.users.find(u => u.id === currentUserId); }
+  function currentUser(){ return currentUserId ? db.users.find(u => u.id === currentUserId) : null; }
   function userById(id){ return db.users.find(u => u.id === id); }
-  function colorFor(id){ const i = db.users.findIndex(u => u.id === id); return PALETTE[Math.max(i,0) % PALETTE.length]; }
-  function initials(name){ return name.split(' ').map(p => p[0]).slice(0,2).join('').toUpperCase(); }
+  function colorFor(id){
+    const u = userById(id);
+    if (u && u.color) return u.color;
+    const i = db.users.findIndex(x => x.id === id);
+    return PALETTE[Math.max(i,0) % PALETTE.length];
+  }
+  function initials(name){ return (name || '?').split(' ').filter(Boolean).map(p => p[0]).slice(0,2).join('').toUpperCase() || '?'; }
   function escapeHtml(s){ const d = document.createElement('div'); d.textContent = s == null ? '' : s; return d.innerHTML; }
 
   function timeAgo(ts){
@@ -383,6 +406,13 @@
   }
 
   function renderMessagesDropdown(){
+    if (!currentUserId){
+      const badge = document.getElementById('msg-badge');
+      if (badge) badge.style.display = 'none';
+      const listEl = document.getElementById('msg-list');
+      if (listEl) listEl.innerHTML = '<div class="dropdown-empty">Please log in.</div>';
+      return;
+    }
     const unread = unreadMessagesCount(currentUserId);
     const badge = document.getElementById('msg-badge');
     badge.style.display = unread ? 'flex' : 'none';
@@ -392,6 +422,7 @@
     const listEl = document.getElementById('msg-list');
     listEl.innerHTML = convos.length ? convos.map(c => {
       const p = userById(c.partnerId);
+      if (!p) return '';
       const mine = c.last.from === currentUserId;
       return `<div class="msg-row ${c.unread ? 'unread' : ''}" data-open-chat="${p.id}">
         ${avatarEl(p.id,'mini')}
@@ -422,17 +453,167 @@
     renderAll();
   }
 
+  /* ---------------- Auth & Session Management ---------------- */
+  function showAuthOverlay(tab = 'login'){
+    const overlay = document.getElementById('auth-overlay');
+    if (!overlay) return;
+    overlay.classList.add('open');
+    switchAuthTab(tab);
+    renderDemoChips();
+  }
+
+  function hideAuthOverlay(){
+    const overlay = document.getElementById('auth-overlay');
+    if (overlay) overlay.classList.remove('open');
+  }
+
+  function switchAuthTab(tab){
+    const isLogin = tab === 'login';
+    document.getElementById('tab-login-btn').classList.toggle('active', isLogin);
+    document.getElementById('tab-signup-btn').classList.toggle('active', !isLogin);
+    document.getElementById('login-panel').classList.toggle('active', isLogin);
+    document.getElementById('signup-panel').classList.toggle('active', !isLogin);
+
+    const lErr = document.getElementById('login-error');
+    const sErr = document.getElementById('signup-error');
+    if (lErr){ lErr.style.display = 'none'; lErr.textContent = ''; }
+    if (sErr){ sErr.style.display = 'none'; sErr.textContent = ''; }
+  }
+
+  function renderDemoChips(){
+    const list = document.getElementById('demo-chips-list');
+    if (!list) return;
+    list.innerHTML = db.users.map(u => `
+      <button type="button" class="demo-chip" data-demo-login="${u.id}" title="Log in as ${escapeHtml(u.name)}">
+        <div class="mini-avatar" style="background:${colorFor(u.id)}">${initials(u.name)}</div>
+        <span>${escapeHtml(u.name.split(' ')[0])}</span>
+      </button>
+    `).join('');
+  }
+
+  function login(userId, showWelcomeToast = true){
+    const u = userById(userId);
+    if (!u) return;
+    currentUserId = userId;
+    localStorage.setItem(AUTH_KEY, userId);
+
+    openComments.clear();
+    seenNotifIds.clear();
+    db.notifications.filter(n => n.userId === currentUserId).forEach(n => seenNotifIds.add(n.id));
+    seenMessageIds.clear();
+    db.messages.filter(m => m.to === currentUserId).forEach(m => seenMessageIds.add(m.id));
+
+    hideAuthOverlay();
+    renderAll();
+    resetComposerVisibility();
+    markOnline(currentUserId);
+    socket.emit('presence', { userId: currentUserId });
+
+    if (showWelcomeToast){
+      showToast(`Welcome back, ${u.name}! 👋`, '✨');
+    }
+  }
+
+  function logout(){
+    if (currentUserId){
+      socket.emit('presence_leave', { userId: currentUserId });
+    }
+    currentUserId = null;
+    localStorage.removeItem(AUTH_KEY);
+
+    // Close all open dialogs & menus
+    closeChat();
+    document.getElementById('profile-modal-overlay').classList.remove('open');
+    document.getElementById('user-dropdown').classList.remove('open');
+    document.getElementById('user-menu-wrap').classList.remove('open');
+    document.getElementById('notif-dropdown').classList.remove('open');
+    document.getElementById('msg-dropdown').classList.remove('open');
+
+    renderAll();
+    showAuthOverlay('login');
+    showToast('You have been logged out.', '🚪');
+  }
+
+  function registerUser(name, handle, email, password, bio, color){
+    let cleanHandle = handle.trim();
+    if (!cleanHandle.startsWith('@')) cleanHandle = '@' + cleanHandle;
+
+    const cleanEmail = email.trim().toLowerCase();
+    const existingHandle = db.users.find(u => u.handle.toLowerCase() === cleanHandle.toLowerCase());
+    if (existingHandle){
+      throw new Error(`Username ${cleanHandle} is already taken.`);
+    }
+    const existingEmail = db.users.find(u => (u.email || '').toLowerCase() === cleanEmail);
+    if (existingEmail){
+      throw new Error(`An account with email ${cleanEmail} already exists.`);
+    }
+
+    const newUser = {
+      id: nextId(db, 'u'),
+      name: name.trim(),
+      handle: cleanHandle,
+      email: cleanEmail,
+      password: password,
+      bio: bio.trim() || 'Building things & sharing with my circle. 🌱',
+      friends: [],
+      savedPosts: [],
+      privacy: { profile: 'public', defaultPost: 'public' },
+      color: color || PALETTE[0]
+    };
+
+    db.users.push(newUser);
+    persistAndBroadcast();
+    login(newUser.id, false);
+    showToast(`Welcome to Circle, ${newUser.name}! 🎉`, '✨');
+  }
+
   /* ---------------- Rendering ---------------- */
-  function renderTopbarViewer(){
-    const sel = document.getElementById('viewer-select');
-    sel.innerHTML = db.users.map(u => `<option value="${u.id}" ${u.id===currentUserId?'selected':''}>${escapeHtml(u.name)}</option>`).join('');
+  function renderUserMenu(){
+    const authBtns = document.getElementById('topbar-auth-btns');
+    const userWrap = document.getElementById('user-menu-wrap');
+
+    if (!currentUserId || !currentUser()){
+      if (authBtns) authBtns.style.display = 'flex';
+      if (userWrap) userWrap.style.display = 'none';
+      return;
+    }
+
+    if (authBtns) authBtns.style.display = 'none';
+    if (userWrap) userWrap.style.display = 'flex';
+
+    const u = currentUser();
     const av = document.getElementById('viewer-avatar');
-    av.style.background = colorFor(currentUserId);
-    av.textContent = initials(currentUser().name);
+    if (av){
+      av.style.background = colorFor(u.id);
+      av.textContent = initials(u.name);
+    }
+
+    const nm = document.getElementById('user-menu-name');
+    if (nm) nm.textContent = u.name.split(' ')[0];
+
+    const bigAv = document.getElementById('user-menu-big-avatar');
+    if (bigAv){
+      bigAv.style.background = colorFor(u.id);
+      bigAv.textContent = initials(u.name);
+    }
+
+    const fullNameEl = document.getElementById('user-menu-full-name');
+    if (fullNameEl) fullNameEl.textContent = u.name;
+
+    const handleEl = document.getElementById('user-menu-handle');
+    if (handleEl) handleEl.textContent = u.handle;
   }
 
   function renderProfileCard(){
     const u = currentUser();
+    if (!u){
+      document.getElementById('profile-name').textContent = 'Circle';
+      document.getElementById('profile-handle').textContent = '@community';
+      document.getElementById('profile-bio').textContent = 'Please log in to share posts and connect.';
+      document.getElementById('stat-friends').textContent = '0';
+      document.getElementById('stat-posts').textContent = '0';
+      return;
+    }
     document.getElementById('profile-cover').style.background = `linear-gradient(135deg, ${colorFor(u.id)}, ${colorFor(db.users[(db.users.indexOf(u)+2)%db.users.length].id)})`;
     const av = document.getElementById('profile-avatar');
     av.style.background = colorFor(u.id);
@@ -450,21 +631,26 @@
   }
 
   function resetComposerVisibility(){
+    if (!currentUser()) return;
     document.getElementById('composer-visibility').value = currentUser().privacy.defaultPost;
   }
 
   function renderFeed(){
     const feedEl = document.getElementById('feed');
+    if (!currentUserId || !currentUser()){
+      feedEl.innerHTML = `<div class="panel empty-feed"><div class="glyph">◐</div>Please log in or sign up to view and interact with posts.</div>`;
+      return;
+    }
     const query = (document.getElementById('search-input').value || '').trim().toLowerCase();
     let list = db.posts.filter(p => canSeePost(p, currentUserId));
     if (feedFilter === 'saved'){
-      const saved = new Set(currentUser().savedPosts);
+      const saved = new Set(currentUser().savedPosts || []);
       list = list.filter(p => saved.has(p.id));
     }
     if (query){
       list = list.filter(p => {
         const author = userById(p.authorId);
-        return p.text.toLowerCase().includes(query) || author.name.toLowerCase().includes(query) || author.handle.toLowerCase().includes(query);
+        return p.text.toLowerCase().includes(query) || (author && (author.name.toLowerCase().includes(query) || author.handle.toLowerCase().includes(query)));
       });
     }
     list = list.slice().sort((a,b) => b.ts - a.ts);
@@ -475,9 +661,9 @@
     }
 
     feedEl.innerHTML = list.map(p => {
-      const author = userById(p.authorId);
+      const author = userById(p.authorId) || { id: 'unknown', name: 'Unknown User', handle: '@unknown' };
       const liked = p.likes.includes(currentUserId);
-      const saved = currentUser().savedPosts.includes(p.id);
+      const saved = (currentUser().savedPosts || []).includes(p.id);
       const commentsOpen = openComments.has(p.id);
       const mine = p.authorId === currentUserId;
       return `
@@ -509,7 +695,7 @@
         </div>
         <div class="comments-wrap ${commentsOpen ? 'open' : ''}">
           ${p.comments.map(c => {
-            const cu = userById(c.authorId);
+            const cu = userById(c.authorId) || { id: 'unknown', name: 'Unknown User' };
             const canDelete = c.authorId === currentUserId || mine;
             return `<div class="comment-row">${avatarEl(cu.id,'mini')}<div class="comment-bubble"><span class="c-name" data-profile="${cu.id}">${escapeHtml(cu.name)}</span>${escapeHtml(c.text)}</div>${canDelete ? `<button class="comment-del" data-delete-comment="${p.id}|${c.id}" title="Delete comment">&times;</button>` : ''}</div>`;
           }).join('')}
@@ -527,6 +713,12 @@
 
   function renderRightPanel(){
     const u = currentUser();
+    if (!u){
+      document.getElementById('incoming-requests').innerHTML = '<div class="empty-mini">Please log in.</div>';
+      document.getElementById('suggestions').innerHTML = '<div class="empty-mini">Please log in.</div>';
+      document.getElementById('friends-list').innerHTML = '<div class="empty-mini">Please log in.</div>';
+      return;
+    }
     const incoming = db.friendRequests.filter(r => r.to === u.id);
     const sent = db.friendRequests.filter(r => r.from === u.id);
     const connectedIds = new Set([...u.friends, ...incoming.map(r=>r.from), ...sent.map(r=>r.to), u.id]);
@@ -551,11 +743,13 @@
     const friendsEl = document.getElementById('friends-list');
     const friendsHtml = u.friends.map(fid => {
       const f = userById(fid);
+      if (!f) return '';
       return `<div class="friend-row">${avatarEl(f.id,'mini')}<div class="req-meta"><div class="name" data-profile="${f.id}"><span class="presence-dot ${isOnline(f.id) ? 'online' : ''}"></span> ${escapeHtml(f.name)}</div><div class="sub">${isOnline(f.id) ? 'Active now' : escapeHtml(f.handle)}</div></div>
         <div class="row-actions"><button class="btn-sm msg-btn" data-open-chat="${f.id}" title="Message">💬</button><button class="btn-sm btn-decline" data-remove-friend="${f.id}" title="Remove friend">&times;</button></div></div>`;
     }).join('');
     const sentHtml = sent.map(r => {
       const to = userById(r.to);
+      if (!to) return '';
       return `<div class="friend-row" style="opacity:.7;">${avatarEl(to.id,'mini')}<div class="req-meta"><div class="name">${escapeHtml(to.name)}</div><div class="sub">Request sent</div></div>
         <div class="row-actions"><button class="btn-sm btn-requested" data-cancel="${r.id}">Cancel</button></div></div>`;
     }).join('');
@@ -563,6 +757,13 @@
   }
 
   function renderNotifications(){
+    if (!currentUserId){
+      const badge = document.getElementById('notif-badge');
+      if (badge) badge.style.display = 'none';
+      const listEl = document.getElementById('notif-list');
+      if (listEl) listEl.innerHTML = '<div class="dropdown-empty">Please log in.</div>';
+      return;
+    }
     const list = db.notifications.filter(n => n.userId === currentUserId).sort((a,b) => b.ts - a.ts);
     const unread = list.filter(n => !n.read).length;
     const badge = document.getElementById('notif-badge');
@@ -579,7 +780,7 @@
   }
 
   function renderAll(){
-    renderTopbarViewer();
+    renderUserMenu();
     renderProfileCard();
     renderFeed();
     renderRightPanel();
@@ -724,12 +925,95 @@
     const openChatTrigger = e.target.closest('[data-open-chat]');
     if (openChatTrigger){ openChat(openChatTrigger.getAttribute('data-open-chat')); return; }
 
+    const demoBtn = e.target.closest('[data-demo-login]');
+    if (demoBtn){
+      const uid = demoBtn.getAttribute('data-demo-login');
+      login(uid);
+      return;
+    }
+
+    const tabBtn = e.target.closest('.auth-tab');
+    if (tabBtn){
+      if (tabBtn.id === 'tab-login-btn') switchAuthTab('login');
+      else if (tabBtn.id === 'tab-signup-btn') switchAuthTab('signup');
+      return;
+    }
+
+    const togglePwd = e.target.closest('.toggle-pwd-btn');
+    if (togglePwd){
+      const targetId = togglePwd.getAttribute('data-target');
+      const input = document.getElementById(targetId);
+      if (input){
+        const isPwd = input.type === 'password';
+        input.type = isPwd ? 'text' : 'password';
+        togglePwd.style.color = isPwd ? 'var(--forest)' : 'var(--muted)';
+      }
+      return;
+    }
+
+    const colorPickDot = e.target.closest('.auth-color-picker .color-dot');
+    if (colorPickDot){
+      document.querySelectorAll('.auth-color-picker .color-dot').forEach(d => d.classList.remove('active'));
+      colorPickDot.classList.add('active');
+      return;
+    }
+
+    const userMenuTrigger = e.target.closest('#user-menu-btn');
+    if (userMenuTrigger){
+      e.stopPropagation();
+      document.getElementById('notif-dropdown').classList.remove('open');
+      document.getElementById('msg-dropdown').classList.remove('open');
+      const uDropdown = document.getElementById('user-dropdown');
+      const uWrap = document.getElementById('user-menu-wrap');
+      const isOpen = uDropdown.classList.toggle('open');
+      uWrap.classList.toggle('open', isOpen);
+      return;
+    }
+
+    if (e.target.closest('#menu-view-profile')){
+      document.getElementById('user-dropdown').classList.remove('open');
+      document.getElementById('user-menu-wrap').classList.remove('open');
+      if (currentUserId) openProfileModal(currentUserId);
+      return;
+    }
+
+    if (e.target.closest('#menu-edit-bio')){
+      document.getElementById('user-dropdown').classList.remove('open');
+      document.getElementById('user-menu-wrap').classList.remove('open');
+      if (currentUserId) updateBio();
+      return;
+    }
+
+    if (e.target.closest('#menu-saved-posts')){
+      document.getElementById('user-dropdown').classList.remove('open');
+      document.getElementById('user-menu-wrap').classList.remove('open');
+      feedFilter = 'saved';
+      document.querySelectorAll('.feed-chip').forEach(c => c.classList.toggle('active', c.getAttribute('data-feed-filter') === 'saved'));
+      renderFeed();
+      return;
+    }
+
+    if (e.target.closest('#menu-theme-toggle')){
+      applyTheme(document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark');
+      return;
+    }
+
+    if (e.target.closest('#menu-logout-btn')){
+      logout();
+      return;
+    }
+
     if (e.target.closest('#profile-modal-overlay') === document.getElementById('profile-modal-overlay') && e.target.id === 'profile-modal-overlay'){
       document.getElementById('profile-modal-overlay').classList.remove('open');
     }
     if (e.target.id === 'chat-modal-overlay'){ closeChat(); }
 
-    if (!e.target.closest('.bell-wrap')){
+    if (!e.target.closest('#user-menu-wrap')){
+      document.getElementById('user-dropdown').classList.remove('open');
+      document.getElementById('user-menu-wrap').classList.remove('open');
+    }
+
+    if (!e.target.closest('.bell-wrap:not(#user-menu-wrap)')){
       document.getElementById('notif-dropdown').classList.remove('open');
       document.getElementById('msg-dropdown').classList.remove('open');
     }
@@ -744,6 +1028,8 @@
       closeLightbox();
       document.getElementById('profile-modal-overlay').classList.remove('open');
       document.getElementById('chat-modal-overlay')?.classList.remove('open');
+      document.getElementById('user-dropdown')?.classList.remove('open');
+      document.getElementById('user-menu-wrap')?.classList.remove('open');
     }
   });
   document.getElementById('lightbox-close-btn').addEventListener('click', closeLightbox);
@@ -754,7 +1040,7 @@
     if (e.target.matches('[data-comment-input]')){
       const postId = e.target.getAttribute('data-comment-input');
       const now = Date.now();
-      if (now - typingThrottle > 800){
+      if (now - typingThrottle > 800 && currentUser()){
         typingThrottle = now;
         socket.emit('typing', { postId, name: currentUser().name });
       }
@@ -776,45 +1062,38 @@
     el._t = setTimeout(() => el.remove(), 2200);
   });
 
-  document.getElementById('viewer-select').addEventListener('change', (e) => {
-    currentUserId = e.target.value;
-    openComments.clear();
-    document.getElementById('notif-dropdown').classList.remove('open');
-    document.getElementById('msg-dropdown').classList.remove('open');
-    closeChat();
-    seenNotifIds.clear();
-    db.notifications.filter(n => n.userId === currentUserId).forEach(n => seenNotifIds.add(n.id));
-    seenMessageIds.clear();
-    db.messages.filter(m => m.to === currentUserId).forEach(m => seenMessageIds.add(m.id));
-    markOnline(currentUserId);
-    socket.emit('presence', { userId: currentUserId });
-    renderAll();
-    resetComposerVisibility();
-  });
-
   document.getElementById('bell-btn').addEventListener('click', (e) => {
     e.stopPropagation();
+    document.getElementById('user-dropdown').classList.remove('open');
+    document.getElementById('user-menu-wrap').classList.remove('open');
     document.getElementById('msg-dropdown').classList.remove('open');
     document.getElementById('notif-dropdown').classList.toggle('open');
   });
   document.getElementById('msg-btn').addEventListener('click', (e) => {
     e.stopPropagation();
+    document.getElementById('user-dropdown').classList.remove('open');
+    document.getElementById('user-menu-wrap').classList.remove('open');
     document.getElementById('notif-dropdown').classList.remove('open');
     document.getElementById('msg-dropdown').classList.toggle('open');
   });
   document.getElementById('mark-all-read').addEventListener('click', () => {
+    if (!currentUserId) return;
     db.notifications.filter(n => n.userId === currentUserId).forEach(n => n.read = true);
     persistAndBroadcast();
     renderNotifications();
   });
 
-  document.getElementById('edit-bio-btn').addEventListener('click', updateBio);
+  document.getElementById('edit-bio-btn').addEventListener('click', () => {
+    if (currentUserId) updateBio();
+  });
 
   document.getElementById('profile-visibility').addEventListener('change', (e) => {
+    if (!currentUser()) return;
     currentUser().privacy.profile = e.target.value;
     persistAndBroadcast();
   });
   document.getElementById('default-post-visibility').addEventListener('change', (e) => {
+    if (!currentUser()) return;
     currentUser().privacy.defaultPost = e.target.value;
     document.getElementById('composer-visibility').value = e.target.value;
     persistAndBroadcast();
@@ -841,6 +1120,10 @@
     document.getElementById('composer-preview').style.display = 'none';
   });
   document.getElementById('composer-post-btn').addEventListener('click', () => {
+    if (!currentUserId){
+      showAuthOverlay('login');
+      return;
+    }
     const textEl = document.getElementById('composer-text');
     const text = textEl.value;
     if (!text.trim() && !composerImage) return;
@@ -864,25 +1147,71 @@
     });
   });
 
+  /* ---------------- Auth Form Listeners ---------------- */
+  document.getElementById('login-form').addEventListener('submit', (e) => {
+    e.preventDefault();
+    const idVal = (document.getElementById('login-identifier').value || '').trim().toLowerCase();
+    const pwdVal = document.getElementById('login-password').value;
+    const errEl = document.getElementById('login-error');
+
+    const user = db.users.find(u =>
+      (u.email || '').toLowerCase() === idVal ||
+      (u.handle || '').toLowerCase() === idVal ||
+      (u.handle || '').toLowerCase() === (idVal.startsWith('@') ? idVal : '@' + idVal)
+    );
+
+    if (!user || user.password !== pwdVal){
+      errEl.textContent = 'Invalid email/username or password. Please check your credentials or try a demo account.';
+      errEl.style.display = 'block';
+      return;
+    }
+
+    errEl.style.display = 'none';
+    login(user.id);
+  });
+
+  document.getElementById('signup-form').addEventListener('submit', (e) => {
+    e.preventDefault();
+    const name = document.getElementById('signup-name').value;
+    const handle = document.getElementById('signup-handle').value;
+    const email = document.getElementById('signup-email').value;
+    const pwd = document.getElementById('signup-password').value;
+    const bio = document.getElementById('signup-bio').value;
+    const errEl = document.getElementById('signup-error');
+
+    try {
+      const activeDot = document.querySelector('.auth-color-picker .color-dot.active');
+      const color = activeDot ? activeDot.getAttribute('data-color') : PALETTE[0];
+      registerUser(name, handle, email, pwd, bio, color);
+      errEl.style.display = 'none';
+      document.getElementById('signup-form').reset();
+    } catch(err) {
+      errEl.textContent = err.message || 'Error creating account.';
+      errEl.style.display = 'block';
+    }
+  });
+
   /* ---------------- Real-time incoming events ---------------- */
   socket.on('sync', () => {
     db = loadDB();
     renderAll();
     if (activeChatWith) renderChatModal();
-    const mine = db.notifications.filter(n => n.userId === currentUserId);
-    mine.forEach(n => {
-      if (!seenNotifIds.has(n.id)){
-        seenNotifIds.add(n.id);
-        showToast(n.text, notifIcon(n.type));
-      }
-    });
-    const myMsgs = db.messages.filter(m => m.to === currentUserId);
-    myMsgs.forEach(m => {
-      if (!seenMessageIds.has(m.id)){
-        seenMessageIds.add(m.id);
-        if (activeChatWith !== m.from) showToast(`${userById(m.from).name}: ${m.text}`, '💬');
-      }
-    });
+    if (currentUserId){
+      const mine = db.notifications.filter(n => n.userId === currentUserId);
+      mine.forEach(n => {
+        if (!seenNotifIds.has(n.id)){
+          seenNotifIds.add(n.id);
+          showToast(n.text, notifIcon(n.type));
+        }
+      });
+      const myMsgs = db.messages.filter(m => m.to === currentUserId);
+      myMsgs.forEach(m => {
+        if (!seenMessageIds.has(m.id)){
+          seenMessageIds.add(m.id);
+          if (activeChatWith !== m.from) showToast(`${userById(m.from).name}: ${m.text}`, '💬');
+        }
+      });
+    }
   });
 
   socket.on('presence', ({ userId }) => {
@@ -891,14 +1220,22 @@
   });
 
   /* ---------------- Init ---------------- */
-  renderAll();
-  resetComposerVisibility();
-  markOnline(currentUserId);
-  socket.emit('presence', { userId: currentUserId });
-  setInterval(() => {
-    socket.emit('presence', { userId: currentUserId });
+  if (currentUserId && currentUser()){
+    renderAll();
+    resetComposerVisibility();
     markOnline(currentUserId);
-    renderRightPanel();
+    socket.emit('presence', { userId: currentUserId });
+  } else {
+    renderAll();
+    showAuthOverlay('login');
+  }
+
+  setInterval(() => {
+    if (currentUserId){
+      socket.emit('presence', { userId: currentUserId });
+      markOnline(currentUserId);
+      renderRightPanel();
+    }
   }, 4000);
 
 })();
